@@ -9,6 +9,8 @@ import {
   Dimensions,
   TextInput,
   Image,
+  ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +18,9 @@ import { Screen } from '@/components/Screen';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 
 const { width } = Dimensions.get('window');
+
+// 获取后端API地址
+const API_BASE = process.env.EXPO_PUBLIC_BACKEND_BASE_URL || 'http://localhost:9091';
 
 // 极光柔和风格配色
 const COLORS = {
@@ -59,6 +64,9 @@ export default function HomeScreen() {
   const router = useSafeRouter();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [moodNote, setMoodNote] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<{ mood: string; analysis: string } | null>(null);
 
   const handleMoodSelect = (moodId: string) => {
     setSelectedMood(moodId);
@@ -69,6 +77,50 @@ export default function HomeScreen() {
       router.push('/island');
     } else if (entryId === 'diary') {
       router.push('/workshop');
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!selectedMood) {
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setShowResult(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/mood/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mood: selectedMood,
+          note: moodNote,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setAnalysisResult({
+          mood: data.mood,
+          analysis: data.analysis,
+        });
+      } else {
+        setAnalysisResult({
+          mood: '分析中',
+          analysis: data.error || '分析服务暂时不可用，请稍后再试。',
+        });
+      }
+    } catch (error) {
+      console.error('分析失败:', error);
+      setAnalysisResult({
+        mood: '连接失败',
+        analysis: '无法连接分析服务，请检查网络后重试。',
+      });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -156,15 +208,22 @@ export default function HomeScreen() {
               />
             </View>
 
-            <TouchableOpacity style={styles.analyzeBtn} activeOpacity={0.8}>
+            <TouchableOpacity 
+              style={[styles.analyzeBtn, !selectedMood && styles.analyzeBtnDisabled]} 
+              activeOpacity={0.8}
+              onPress={handleAnalyze}
+              disabled={!selectedMood || isAnalyzing}
+            >
               <LinearGradient
-                colors={['#7B6EF6', '#5CE0D8']}
+                colors={selectedMood ? ['#7B6EF6', '#5CE0D8'] : ['#4A4860', '#3A3850']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.analyzeBtnGradient}
               >
                 <Ionicons name="analytics" size={18} color="#FFF" />
-                <Text style={styles.analyzeBtnText}>开始分析</Text>
+                <Text style={styles.analyzeBtnText}>
+                  {isAnalyzing ? '分析中...' : '开始分析'}
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
           </LinearGradient>
@@ -229,6 +288,62 @@ export default function HomeScreen() {
         {/* 底部安全区 */}
         <View style={styles.bottomSafe} />
       </ScrollView>
+
+      {/* AI分析结果弹窗 */}
+      <Modal
+        visible={showResult}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowResult(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <View style={styles.aiAvatarSmall}>
+                  <Ionicons name="flower" size={20} color={COLORS.primary} />
+                </View>
+                <Text style={styles.modalTitle}>AI情绪分析</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.closeBtn}
+                onPress={() => setShowResult(false)}
+              >
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.analysisContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {isAnalyzing ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={COLORS.primary} />
+                  <Text style={styles.loadingText}>正在分析你的情绪...</Text>
+                  <Text style={styles.loadingSubtext}>请稍候</Text>
+                </View>
+              ) : analysisResult ? (
+                <View style={styles.analysisResult}>
+                  <View style={styles.moodTag}>
+                    <Text style={styles.moodTagText}>{analysisResult.mood}</Text>
+                  </View>
+                  <Text style={styles.analysisText}>{analysisResult.analysis}</Text>
+                </View>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalBtn}
+                onPress={() => setShowResult(false)}
+              >
+                <Text style={styles.modalBtnText}>我知道了</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -476,5 +591,109 @@ const styles = StyleSheet.create({
   },
   bottomSafe: {
     height: 40,
+  },
+  // 按钮禁用样式
+  analyzeBtnDisabled: {
+    opacity: 0.6,
+  },
+  // 弹窗样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxHeight: '80%',
+    backgroundColor: COLORS.background,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.cardBorder,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  aiAvatarSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: `${COLORS.primary}20`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  analysisContent: {
+    maxHeight: 300,
+    padding: 20,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    marginTop: 16,
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+  },
+  analysisResult: {
+    gap: 16,
+  },
+  moodTag: {
+    backgroundColor: `${COLORS.primary}20`,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+  moodTagText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  analysisText: {
+    fontSize: 15,
+    color: COLORS.textPrimary,
+    lineHeight: 24,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  modalBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
   },
 });
