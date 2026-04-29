@@ -83,7 +83,7 @@ const ISLANDS = [
     mood: '解压',
     moodColor: '#667EEA',
     image: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600',
-    icon: 'mountain',
+    icon: 'globe',
   },
 ];
 

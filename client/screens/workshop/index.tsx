@@ -100,7 +100,7 @@ const EXERCISES = [
     level: '入门',
     progress: 60,
     description: '通过扫描身体感受来达到放松',
-    icon: 'body',
+    icon: 'person',
     color: '#5CE0D8',
     image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400',
     steps: [

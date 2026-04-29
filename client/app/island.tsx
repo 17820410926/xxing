@@ -1,1 +1,1 @@
-export { default } from '@/screens/island';
+export { default } from "@/screens/island";
